@@ -1,51 +1,86 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, FlatList, Dimensions } from 'react-native';
+import { 
+  View, 
+  Text, 
+  TouchableOpacity, 
+  StyleSheet, 
+  FlatList, 
+  Dimensions, 
+  useColorScheme 
+} from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { toggleHabitDay, getDoneDays } from '../storage/habits';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
-const DAY_NAMES = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 
-export default function HabitCalendarScreen({ route }: any) {
+export default function HabitCalendarScreen({ route, navigation }: any) {
   const { habitId, habitName } = route.params;
   const [doneDays, setDoneDays] = useState<string[]>([]);
-  const now = new Date();
+  const [themeMode, setThemeMode] = useState<'system' | 'light' | 'dark'>('system');
+  
+  const systemColorScheme = useColorScheme();
+  const todayStr = new Date().toISOString().slice(0, 10);
 
+  // 1. Логика определения темы (такая же, как на главном экране)
+  const isDark = themeMode === 'system' 
+    ? systemColorScheme === 'dark' 
+    : themeMode === 'dark';
+
+  const theme = {
+    bg: isDark ? '#000000' : '#f8f9fa',
+    card: isDark ? '#1C1C1E' : '#ffffff',
+    text: isDark ? '#FFFFFF' : '#1a1a1a',
+    textSecondary: isDark ? '#8E8E93' : '#666',
+    border: isDark ? '#38383A' : '#eee',
+    dayDefault: isDark ? '#2C2C2E' : '#f0f0f0',
+    accent: '#5856D6',
+  };
+
+  // 2. Загрузка данных и сохраненной темы
   useEffect(() => {
-    loadDoneDays();
+    const init = async () => {
+      const savedTheme = await AsyncStorage.getItem('user_theme');
+      if (savedTheme) setThemeMode(savedTheme as any);
+      loadDoneDays();
+    };
+    init();
   }, []);
+
+  // Синхронизация заголовка навигации с темой
+  useEffect(() => {
+    navigation.setOptions({
+      headerTitle: habitName,
+      headerStyle: { backgroundColor: theme.bg },
+      headerTintColor: theme.text,
+      headerShadowVisible: false,
+    });
+  }, [themeMode, isDark]);
 
   async function loadDoneDays() {
     const data = await getDoneDays(habitId);
     setDoneDays(data);
   }
 
-  // Генерируем список месяцев на 5 лет (60 месяцев)
+  // Генерируем список месяцев (например, за последние 5 лет)
   const months = useMemo(() => {
     const result = [];
-    const start = new Date(now.getFullYear(), now.getMonth(), 1);
-    
+    const now = new Date();
     for (let i = 0; i < 60; i++) {
-      const d = new Date(start.getFullYear(), start.getMonth() - i, 1);
-      result.push({
-        id: `${d.getFullYear()}-${d.getMonth()}`,
-        year: d.getFullYear(),
-        month: d.getMonth(),
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      result.push({ 
+        id: `${d.getFullYear()}-${d.getMonth()}`, 
+        year: d.getFullYear(), 
+        month: d.getMonth() 
       });
     }
     return result;
   }, []);
 
-  const handlePress = async (date: string) => {
-    const isDone = doneDays.includes(date);
-    await toggleHabitDay(habitId, date, !isDone);
-    loadDoneDays();
-  };
-
   // Компонент одного месяца
   const MonthItem = ({ year, month }: { year: number, month: number }) => {
     const days = [];
     const firstDay = new Date(year, month, 1).getDay();
-    const offset = firstDay === 0 ? 6 : firstDay - 1;
+    const offset = firstDay === 0 ? 6 : firstDay - 1; // Пн - 0
     const lastDay = new Date(year, month + 1, 0).getDate();
 
     for (let i = 0; i < offset; i++) days.push(null);
@@ -53,29 +88,45 @@ export default function HabitCalendarScreen({ route }: any) {
       days.push(`${year}-${String(month + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`);
     }
 
-    const monthName = new Date(year, month).toLocaleString('ru-RU', { month: 'long' });
+    const monthTitle = new Date(year, month).toLocaleString('ru-RU', { 
+      month: 'long', 
+      year: 'numeric' 
+    }).toUpperCase();
 
     return (
       <View style={styles.monthContainer}>
-        <Text style={styles.monthLabel}>{monthName.toUpperCase()} {year}</Text>
-        <View style={styles.dayNamesRow}>
-          {DAY_NAMES.map(d => <Text key={d} style={styles.dayNameText}>{d}</Text>)}
-        </View>
+        <Text style={[styles.monthLabel, { color: theme.textSecondary }]}>{monthTitle}</Text>
         <View style={styles.grid}>
-          {days.map((date, index) => {
-            if (!date) return <View key={`empty-${index}`} style={styles.dayEmpty} />;
+          {days.map((date, i) => {
+            if (!date) return <View key={`empty-${i}`} style={styles.dayCell} />;
             
             const isDone = doneDays.includes(date);
-            const isToday = date === now.toISOString().slice(0, 10);
-            const dayNum = date.split('-')[2];
+            const isToday = date === todayStr;
+            const isFuture = date > todayStr;
 
             return (
               <TouchableOpacity
                 key={date}
-                onPress={() => handlePress(date)}
-                style={[styles.day, isDone && styles.dayDone, isToday && !isDone && styles.todayBorder]}
+                disabled={isFuture}
+                onPress={async () => {
+                  await toggleHabitDay(habitId, date, !isDone);
+                  loadDoneDays();
+                }}
+                style={[
+                  styles.dayCell,
+                  { backgroundColor: theme.dayDefault },
+                  isDone && { backgroundColor: theme.accent },
+                  isToday && !isDone && { borderColor: theme.accent, borderWidth: 2 },
+                  isFuture && { opacity: 0.15 }
+                ]}
               >
-                <Text style={[styles.dayText, isDone && styles.dayTextDone]}>{parseInt(dayNum)}</Text>
+                <Text style={[
+                  styles.dayText, 
+                  { color: theme.text },
+                  isDone && { color: '#fff', fontWeight: 'bold' }
+                ]}>
+                  {parseInt(date.split('-')[2])}
+                </Text>
               </TouchableOpacity>
             );
           })}
@@ -85,53 +136,38 @@ export default function HabitCalendarScreen({ route }: any) {
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.header}>{habitName}</Text>
-      
+    <View style={[styles.container, { backgroundColor: theme.bg }]}>
       <FlatList
         data={months}
         keyExtractor={item => item.id}
-        initialNumToRender={2}
+        contentContainerStyle={{ paddingVertical: 10 }}
         renderItem={({ item }) => <MonthItem year={item.year} month={item.month} />}
-        ListFooterComponent={<View style={{ height: 100 }} />}
       />
-
-      <TouchableOpacity 
-        style={styles.todayButton} 
-        onPress={() => handlePress(now.toISOString().slice(0, 10))}
-      >
-        <Text style={styles.todayButtonText}>Выполнено сегодня</Text>
-      </TouchableOpacity>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff' },
-  header: { fontSize: 22, fontWeight: 'bold', textAlign: 'center', padding: 15, backgroundColor: '#fff', zIndex: 10 },
-  monthContainer: { marginBottom: 30, paddingHorizontal: 10 },
-  monthLabel: { fontSize: 18, fontWeight: '600', color: '#555', marginBottom: 10, marginLeft: 5 },
-  dayNamesRow: { flexDirection: 'row', justifyContent: 'space-around', marginBottom: 5 },
-  dayNameText: { width: (SCREEN_WIDTH - 40) / 7, textAlign: 'center', color: '#bbb', fontSize: 12, fontWeight: '700' },
-  grid: { flexDirection: 'row', flexWrap: 'wrap' },
-  day: { 
-    width: (SCREEN_WIDTH - 40) / 7, 
-    height: (SCREEN_WIDTH - 40) / 7, 
-    margin: 2, 
+  container: { flex: 1 },
+  monthContainer: { marginBottom: 30, paddingHorizontal: 15 },
+  monthLabel: { 
+    fontSize: 14, 
+    fontWeight: '800', 
+    marginBottom: 12, 
+    letterSpacing: 1 
+  },
+  grid: { 
+    flexDirection: 'row', 
+    flexWrap: 'wrap',
+    justifyContent: 'flex-start'
+  },
+  dayCell: { 
+    width: (SCREEN_WIDTH - 30) / 7 - 6, 
+    height: (SCREEN_WIDTH - 30) / 7 - 6, 
+    margin: 3, 
     borderRadius: 10, 
     alignItems: 'center', 
-    justifyContent: 'center', 
-    backgroundColor: '#f9f9f9' 
+    justifyContent: 'center' 
   },
-  dayEmpty: { width: (SCREEN_WIDTH - 40) / 7, height: (SCREEN_WIDTH - 40) / 7, margin: 2 },
-  dayDone: { backgroundColor: '#5856D6' },
-  todayBorder: { borderWidth: 2, borderColor: '#5856D6' },
-  dayText: { fontSize: 16, color: '#444' },
-  dayTextDone: { color: '#fff', fontWeight: 'bold' },
-  todayButton: { 
-    position: 'absolute', bottom: 30, left: 20, right: 20,
-    backgroundColor: '#5856D6', padding: 18, borderRadius: 16,
-    alignItems: 'center', shadowOpacity: 0.3, shadowRadius: 8, elevation: 5
-  },
-  todayButtonText: { color: '#fff', fontSize: 18, fontWeight: 'bold' }
+  dayText: { fontSize: 13 },
 });
