@@ -162,8 +162,21 @@ export default function HabitListScreen({ navigation }: any) {
               onLongPress={() => onEditHabit(item.id, item.name)}
               style={styles.habitMainInfo}
             >
-              <View>
+              <View style={{ flex: 1 }}>
                 <Text style={styles.habitText}>{item.name}</Text>
+                
+                {/* Блок статистики */}
+                <View style={styles.statsRow}>
+                  <View style={styles.statBadge}>
+                    <Text style={styles.statLabel}>МЕСЯЦ:</Text>
+                    <Text style={styles.statValue}>{item.monthCount}</Text>
+                  </View>
+                  <View style={[styles.statBadge, { backgroundColor: '#EBEBFB' }]}>
+                    <Text style={[styles.statLabel, { color: '#5856D6' }]}>ГОД:</Text>
+                    <Text style={[styles.statValue, { color: '#5856D6' }]}>{item.yearCount}</Text>
+                  </View>
+                </View>
+                
                 <Text style={styles.editHint}>удерживайте для настроек</Text>
               </View>
               <Text style={styles.arrow}>›</Text>
@@ -216,4 +229,30 @@ const styles = StyleSheet.create({
   miniDotToday: { borderColor: '#5856D6', borderWidth: 1.5 },
   miniText: { fontSize: 10, color: '#999' },
   miniTextDone: { color: '#fff', fontWeight: 'bold' },
+
+  statsRow: {
+    flexDirection: 'row',
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  statBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f0f0f0',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    marginRight: 10,
+  },
+  statLabel: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#888',
+    marginRight: 4,
+  },
+  statValue: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    color: '#444',
+  },
 });

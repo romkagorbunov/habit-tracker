@@ -59,14 +59,42 @@ export async function deleteHabit(id: string): Promise<void> {
 
 export async function getHabitsWithHistory() {
   const habits = await getHabits();
+  const now = new Date();
+  const yearStr = `${now.getFullYear()}`;
+  const monthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
   const allHistory = await db.getAllAsync<{habit_id: string, date: string}>(
     `SELECT habit_id, date FROM habit_days`
   );
 
-  return habits.map(habit => ({
-    ...habit,
-    doneDays: allHistory
-      .filter(h => h.habit_id === habit.id)
-      .map(h => h.date)
-  }));
+  return habits.map(habit => {
+    const history = allHistory.filter(h => h.habit_id === habit.id);
+    return {
+      ...habit,
+      doneDays: history.map(h => h.date),
+      monthCount: history.filter(h => h.date.startsWith(monthStr)).length,
+      yearCount: history.filter(h => h.date.startsWith(yearStr)).length
+    };
+  });
+}
+
+export async function getHabitStats(habitId: string): Promise<{ month: number, year: number }> {
+  const now = new Date();
+  const yearStart = `${now.getFullYear()}-01-01`;
+  const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+
+  const yearCount = await db.getFirstAsync<{ count: number }>(
+    'SELECT COUNT(*) as count FROM habit_days WHERE habit_id = ? AND date >= ?',
+    [habitId, yearStart]
+  );
+
+  const monthCount = await db.getFirstAsync<{ count: number }>(
+    'SELECT COUNT(*) as count FROM habit_days WHERE habit_id = ? AND date >= ?',
+    [habitId, monthStart]
+  );
+
+  return {
+    month: monthCount?.count || 0,
+    year: yearCount?.count || 0
+  };
 }
