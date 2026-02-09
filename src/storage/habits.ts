@@ -56,3 +56,17 @@ export async function deleteHabit(id: string): Promise<void> {
   // Затем саму привычку
   await db.runAsync('DELETE FROM habits WHERE id = ?', [id]);
 }
+
+export async function getHabitsWithHistory() {
+  const habits = await getHabits();
+  const allHistory = await db.getAllAsync<{habit_id: string, date: string}>(
+    `SELECT habit_id, date FROM habit_days`
+  );
+
+  return habits.map(habit => ({
+    ...habit,
+    doneDays: allHistory
+      .filter(h => h.habit_id === habit.id)
+      .map(h => h.date)
+  }));
+}
